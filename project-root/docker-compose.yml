@@ -1,0 +1,151 @@
+services:
+########################################################################
+#  c01 – back-end                                                      #
+########################################################################
+  c01-backend:
+    build: ./C01/backend
+    container_name: c01-backend
+    environment:
+      SPRING_RABBITMQ_HOST: c02-rabbitmq    # rabbitmq host for spring app
+      ORACLE_HOST: oracle-db                 # oracle db host
+      ORACLE_PORT: 1521                     # oracle db port
+      ORACLE_SID: XEPDB1                    # oracle sid
+      ORACLE_USER: angelica                 # oracle user
+      ORACLE_PASSWORD: angelica123          # oracle password
+    depends_on:
+      c02-rabbitmq:
+        condition: service_healthy          # wait for rabbitmq healthy
+      c05:
+        condition: service_started          # wait for nodejs service started
+      mysql:
+        condition: service_healthy          # wait for mysql healthy
+      mongo:
+        condition: service_started          # wait for mongo started
+    networks: [encnet]
+    ports:
+      - "8080:8080"                         # expose backend on 8080
+
+########################################################################
+#  c01 – front-end (react)                                             #
+########################################################################
+  c01-frontend:
+    build: ./C01/frontend
+    container_name: c01-frontend
+    depends_on: [c01-backend]               # wait for backend before starting
+    ports:
+      - "80:80"                            # expose frontend on port 80
+    networks: [encnet]
+
+########################################################################
+#  c02 – rabbitmq broker                                               #
+########################################################################
+  c02-rabbitmq:
+    image: rabbitmq:3-management
+    container_name: c02-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: angelica
+      RABBITMQ_DEFAULT_PASS: angelica123
+    ports:
+      - "5672:5672"                       # amqp protocol port
+      - "15672:15672"                     # rabbitmq management ui port
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "status"]  # check rabbitmq status
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [encnet]
+
+########################################################################
+#  c03 – tomee + java mdb + mpi_openmp                                 #
+########################################################################
+  c03-tomee:
+    build:
+      context: .
+      dockerfile: C03/Dockerfile
+    container_name: c03-tomee
+    depends_on:
+      c02-rabbitmq: { condition: service_started } # wait for rabbitmq started
+    environment:
+      RESULT_API_HOST: c05              # host for result api
+    ports:
+      - "8081:8080"                    # expose tomee on 8081 externally
+    networks: [encnet]
+
+########################################################################
+#  c04 – optional container with mpi binary for tests                 #
+########################################################################
+  c04-mpi:
+    build: ./C04
+    image: project-c04
+    container_name: c04-mpi
+    depends_on:
+      c03-tomee: { condition: service_started } # wait for tomee started
+    networks: [encnet]
+    entrypoint: ["sleep", "infinity"]        # keep container running for tests
+
+########################################################################
+#  c05 – node.js + mysql + mongodb                                     #
+########################################################################
+  c05:
+    build: ./C05
+    container_name: c05
+    depends_on:
+      mysql: { condition: service_healthy }   # wait for mysql healthy
+      mongo: { condition: service_started }   # wait for mongo started
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypass123
+      MYSQL_DATABASE: imagesdb
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+    ports:
+      - "3000:3000"                          # expose nodejs on 3000
+    networks: [encnet]
+
+########################################################################
+#  mysql                                                               #
+########################################################################
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: imagesdb
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypass123
+      TZ: Europe/Bucharest
+    volumes:
+      - mysql-data:/var/lib/mysql               # persistent mysql data
+      - ./C05/init/mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql # init script
+    ports:
+      - "3306:3306"                             # mysql port exposed
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -umyuser -pmypass123 -e 'USE imagesdb;'"] # check mysql ready
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [encnet]
+
+########################################################################
+#  mongodb                                                             #
+########################################################################
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    restart: always
+    volumes:
+      - mongo-data:/data/db                    # persistent mongo data
+      - ./C05/init/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js # init script
+    ports:
+      - "27017:27017"                          # mongo port exposed
+    networks: [encnet]
+
+volumes:
+  mysql-data:
+  mongo-data:
+
+networks:
+  encnet:

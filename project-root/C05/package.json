@@ -1,0 +1,12 @@
+{
+  "name": "c05-service",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "express": "^4.19.0",
+    "mongodb": "^6.6.0",
+    "mysql2": "^3.10.0",
+    "cors": "^2.8.5",
+    "morgan": "^1.10.0"
+  }
+}
