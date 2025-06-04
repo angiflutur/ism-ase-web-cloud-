@@ -8,8 +8,9 @@ It consists of multiple Docker containers communicating via RabbitMQ and REST AP
 
 ## Workflow Diagram
 
-![Workflow Diagram](project-root/diagram.png)
+![Workflow Diagram](diagram.png)
 
+---
 
 ## Running the Application
 
@@ -19,19 +20,22 @@ From the project root directory, run:
 
 ```bash
 docker-compose up --build
-### Access the Web Interface (Frontend)
+```
+## Access the Web Interface (Frontend)
 
 Open your browser and go to:
 
 ```plaintext
 http://localhost
-Access RabbitMQ Management Console
+```
+## Access RabbitMQ Management Console
 Monitor queues and messages at:
-
-plaintext
-Copiază codul
+```
 http://localhost:15672
+```
 Login credentials:
-
+```
 Username: angelica
+
 Password: angelica123
+```
