@@ -8,7 +8,7 @@ It consists of multiple Docker containers communicating via RabbitMQ and REST AP
 
 ## Workflow Diagram
 
-![Workflow Diagram](diagram.png)
+![Workflow Diagram](project-root/diagram.png)
 
 ---
 
