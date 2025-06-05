@@ -13,15 +13,14 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "150mb" }));
 app.use(cors({ origin: "*" }));
 
-/* ─────────────── mongo (gridfs) ─────────────── */
+/* ─────────────── Mongo (GridFS) ─────────────── */
 const mongo = new MongoClient(
   `mongodb://${process.env.MONGO_HOST}:27017`
 );
 await mongo.connect();
-// create a gridfs bucket for storing files in mongodb
 const bucket = new GridFSBucket(mongo.db("imagesdb"));
 
-/* ─────────────── mysql pool ─────────────── */
+/* ─────────────── MySQL pool ─────────────── */
 const db = mysql.createPool({
   host:               process.env.MYSQL_HOST,
   user:               process.env.MYSQL_USER,
@@ -31,7 +30,7 @@ const db = mysql.createPool({
   connectionLimit:    10
 });
 
-/* create table if not exists on startup */
+/* creeaza tabela la pornire */
 await db.execute(`
   CREATE TABLE IF NOT EXISTS images_meta (
     id   VARCHAR(24) PRIMARY KEY,
@@ -42,58 +41,54 @@ await db.execute(`
   )
 `);
 
-/* ─────────────── /api/result  (post) ─────────────── */
+/* ─────────────── /api/result  (POST) ─────────────── */
 app.post("/api/result", async (req, res) => {
   try {
     const { fileName, operation, mode, resultBase64 } = req.body;
 
     if (!fileName || !operation || !mode || !resultBase64)
-      return res.status(400).json({ error: "missing required fields" });
+      return res.status(400).json({ error: "Missing required fields" });
 
-    /* 1 convert base64 string to buffer and save file in gridfs */
+    /* 1 salveaza fisierul in GridFS */
     const id = new ObjectId();
     const buffer = Buffer.from(resultBase64, "base64");
-    // wait for upload stream to finish
     await finished(bucket.openUploadStreamWithId(id, fileName).end(buffer));
 
-    /* 2 insert metadata in mysql */
+    /* 2 metadate in MySQL */
     await db.execute(
-      "insert into images_meta(id,name,op,mode) values (?,?,?,?)",
+      "INSERT INTO images_meta(id,name,op,mode) VALUES (?,?,?,?)",
       [id.toString(), fileName, operation, mode]
     );
 
     res.json({ id: id.toString() });
   } catch (err) {
-    console.error("upload error:", err.message);
-    res.status(500).json({ error: "internal server error" });
+    console.error("Upload error:", err.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-/* ─────────────── /api/result/last  (get) ─────────────── */
+/* ─────────────── /api/result/last  (GET) ─────────────── */
 app.get("/api/result/last", async (_req, res) => {
-  // get the most recent record id from mysql
   const [rows] = await db.execute(
-    "select id from images_meta order by ts desc limit 1"
+    "SELECT id FROM images_meta ORDER BY ts DESC LIMIT 1"
   );
-  if (!rows.length) return res.status(204).end(); // no data yet
+  if (!rows.length) return res.status(204).end(); 
   res.json({ id: rows[0].id });
 });
 
-/* ─────────────── /api/result/:id  (get) ─────────────── */
+/* ─────────────── /api/result/:id  (GET) ─────────────── */
 app.get("/api/result/:id([a-fA-F\\d]{24})", (req, res) => {
   const id = new ObjectId(req.params.id);
-  // check if file exists in gridfs by count
   bucket.find({ _id: id }).count().then(cnt => {
-    if (!cnt) return res.status(404).json({ error: "file not found" });
-    res.set("cache-control", "no-store").type("bmp");
-    // stream the file to response
+    if (!cnt) return res.status(404).json({ error: "File not found" });
+    res.set("Cache-Control", "no-store").type("bmp");
     bucket.openDownloadStream(id).pipe(res);
   }).catch(err => {
     console.error(err.message);
-    res.status(500).json({ error: "internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   });
 });
 
-/* ─────────────── start server ─────────────── */
+/* ─────────────── start ─────────────── */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("node api ready on port", PORT));
+app.listen(PORT, () => console.log("Node API ready on port", PORT));
